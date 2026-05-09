@@ -1,0 +1,59 @@
+name: Codex Cloud Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_path:
+        description: Path to a job folder containing task.py
+        required: true
+        type: string
+  push:
+    paths:
+      - "remote-compute/github-actions/jobs/**"
+      - "remote-compute/github-actions/cloud_job_runner.py"
+      - ".github/workflows/codex-cloud-runner.yml"
+  pull_request:
+    paths:
+      - "remote-compute/github-actions/jobs/**"
+      - "remote-compute/github-actions/cloud_job_runner.py"
+      - ".github/workflows/codex-cloud-runner.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: codex-cloud-runner-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run-cloud-job:
+    name: Run remote job
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run selected job
+        env:
+          CODEX_JOB_PATH: ${{ github.event_name == 'workflow_dispatch' && inputs.job_path || '' }}
+          CODEX_CLOUD_RESULTS: ${{ runner.temp }}/codex-cloud-results
+        run: python remote-compute/github-actions/cloud_job_runner.py
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codex-cloud-results
+          path: ${{ runner.temp }}/codex-cloud-results
+          if-no-files-found: warn
+          retention-days: 3
